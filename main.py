@@ -60,7 +60,7 @@ def generate_content():
     for attempt in range(5):
         try:
             response = client.models.generate_content(
-                model="gemini-hydrogen",
+                model="gemini-3.8-flash",
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json"
