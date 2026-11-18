@@ -1,6 +1,7 @@
 import os
 import json
 import random
+import time
 import asyncio
 import textwrap
 from io import BytesIO
@@ -17,9 +18,10 @@ TIKTOK_SESSION_ID = os.environ["TIKTOK_SESSION_ID"]
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
+
 def generate_content():
     mode = random.choice(["words", "idiom"])
-    
+
     if mode == "words":
         level = random.choice(["A2", "B1", "B2", "C1"])
         prompt = f"""
@@ -55,12 +57,22 @@ def generate_content():
         }
         """
 
-    response = client.models.generate_content(
-      model="gemini-3.8-flash",
-        contents=prompt,
-        config=types.GenerateContentConfig(response_mime_type="application/json")
-    )
-    return json.loads(response.text)
+    for attempt in range(5):
+        try:
+            response = client.models.generate_content(
+                model="gemini-hydrogen",
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                ),
+            )
+            return json.loads(response.text)
+        except Exception as e:
+            print(f"Ошибка запроса к Gemini (попытка {attempt + 1}/5): {e}")
+            if attempt == 4:
+                raise
+            time.sleep(15)
+
 
 def generate_background(bg_prompt):
     try:
@@ -70,8 +82,8 @@ def generate_background(bg_prompt):
             config=types.GenerateImagesConfig(
                 number_of_images=1,
                 aspect_ratio="9:16",
-                output_mime_type="image/jpeg"
-            )
+                output_mime_type="image/jpeg",
+            ),
         )
         for generated_image in result.generated_images:
             img = Image.open(BytesIO(generated_image.image.image_bytes))
@@ -81,11 +93,12 @@ def generate_background(bg_prompt):
         img = Image.new("RGB", (1080, 1920), color=(25, 28, 36))
         return img
 
+
 def create_card_image(data, bg_img, output_path="card.png"):
     # Затемняем фон для читаемости текста
     enhancer = ImageEnhance.Brightness(bg_img)
     img = enhancer.enhance(0.45).convert("RGBA")
-    
+
     # Рисуем полупрозрачную плашку по центру
     overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
     draw_overlay = ImageDraw.Draw(overlay)
@@ -94,7 +107,7 @@ def create_card_image(data, bg_img, output_path="card.png"):
         radius=40,
         fill=(15, 17, 23, 210),
         outline=(255, 255, 255, 60),
-        width=3
+        width=3,
     )
     img = Image.alpha_composite(img, overlay).convert("RGB")
     draw = ImageDraw.Draw(img)
@@ -124,7 +137,7 @@ def create_card_image(data, bg_img, output_path="card.png"):
         for w_line in textwrap.wrap(data["translation"], width=32):
             draw.text((110, y), w_line, font=main_font, fill=(200, 200, 200))
             y += 54
-        
+
         y += 60
         draw.text((110, y), "Примеры:", font=main_font, fill=(255, 215, 0))
         y += 70
@@ -140,47 +153,53 @@ def create_card_image(data, bg_img, output_path="card.png"):
 
     img.save(output_path)
 
+
 async def generate_audio(text, output_path="voice.mp3"):
     # Голос en-US-AndrewNeural звучит очень естественно
     communicate = edge_tts.Communicate(text, "en-US-AndrewNeural")
     await communicate.save(output_path)
 
+
 def build_video(image_path, audio_path, video_path="output.mp4"):
     audio = AudioFileClip(audio_path)
-    duration = max(audio.duration + 1.5, 6.0) # минимум 6 секунд
+    duration = max(audio.duration + 1.5, 6.0)  # минимум 6 секунд
     clip = ImageClip(image_path).set_duration(duration)
     clip = clip.set_audio(audio)
     clip.write_videofile(video_path, fps=24, codec="libx264", audio_codec="aac")
 
+
 def main():
     print("1. Генерируем контент...")
     data = generate_content()
-    
+
     print("2. Генерируем фон...")
     bg = generate_background(data["bg_prompt"])
-    
+
     print("3. Собираем карточку...")
     create_card_image(data, bg, "card.png")
-    
+
     print("4. Генерируем озвучку...")
     asyncio.run(generate_audio(data["tts_text"], "voice.mp3"))
-    
+
     print("5. Рендерим видео...")
     build_video("card.png", "voice.mp3", "output.mp4")
-    
+
     print("6. Загружаем в TikTok...")
     # Сохраняем sessionid во временный файл cookies.txt в формате Netscape
     with open("cookies.txt", "w") as f:
         f.write("# Netscape HTTP Cookie File\n")
-        f.write(f".tiktok.com\tTRUE\t/\tTRUE\t2147483647\tsessionid\t{TIKTOK_SESSION_ID}\n")
+        f.write(
+            f".tiktok.com\tTRUE\t/\tTRUE\t2147483647\tsessionid\t{TIKTOK_SESSION_ID}\n"
+        )
 
     upload_video(
         "output.mp4",
         description=data["caption"],
         cookies="cookies.txt",
-        headless=True
+        headless=True,
     )
     print("Готово! Видео опубликовано.")
+
 
 if __name__ == "__main__":
     main()
