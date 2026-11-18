@@ -2,14 +2,13 @@ name: Auto Post to TikTok
 
 on:
   schedule:
-    # Запуск каждый день в 15:00 по UTC (18:00 по Москве)
     - cron: '0 15 * * *'
-  # Позволяет запускать скрипт вручную кнопкой на сайте GitHub для проверки
   workflow_dispatch:
 
 jobs:
   build-and-post:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Скачиваем код репозитория
@@ -32,4 +31,12 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TIKTOK_SESSION_ID: ${{ secrets.TIKTOK_SESSION_ID }}
-        run: python main.py
+        run: python -u main.py
+
+      - name: Сохраняем готовое видео (на случай ошибки выгрузки в TikTok)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-video
+          path: output.mp4
+          if-no-files-found: ignore
