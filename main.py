@@ -16,7 +16,10 @@ from tiktok_uploader.upload import upload_video
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 TIKTOK_SESSION_ID = os.environ["TIKTOK_SESSION_ID"]
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+client = genai.Client(
+    api_key=GEMINI_API_KEY,
+    http_options=types.HttpOptions(timeout=30000),  # жесткий таймаут 30 секунд
+)
 
 
 def generate_content():
@@ -63,7 +66,8 @@ def generate_content():
                 model="gemini-3.8-flash",
                 contents=prompt,
                 config=types.GenerateContentConfig(
-                    response_mime_type="application/json"
+                    response_mime_type="application/json",
+                    thinking_config=types.ThinkingConfig(thinking_budget=0),
                 ),
             )
             return json.loads(response.text)
@@ -71,7 +75,7 @@ def generate_content():
             print(f"Ошибка запроса к Gemini (попытка {attempt + 1}/5): {e}")
             if attempt == 4:
                 raise
-            time.sleep(15)
+            time.sleep(10)
 
 
 def generate_background(bg_prompt):
