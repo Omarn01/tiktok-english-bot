@@ -1,0 +1,35 @@
+name: Auto Post to TikTok
+
+on:
+  schedule:
+    # Запуск каждый день в 15:00 по UTC (18:00 по Москве)
+    - cron: '0 15 * * *'
+  # Позволяет запускать скрипт вручную кнопкой на сайте GitHub для проверки
+  workflow_dispatch:
+
+jobs:
+  build-and-post:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Скачиваем код репозитория
+        uses: actions/checkout@v4
+
+      - name: Устанавливаем Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Устанавливаем FFmpeg и зависимости
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          pip install -r requirements.txt
+          playwright install chromium
+          playwright install-deps
+
+      - name: Запуск генерации и публикации
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TIKTOK_SESSION_ID: ${{ secrets.TIKTOK_SESSION_ID }}
+        run: python main.py
